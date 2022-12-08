@@ -1,0 +1,10 @@
+[package]
+edition = "2021"
+name = "alderlake-llc-slice-latency-test"
+version = "0.1.0"
+author = ["victoryang00 <yangyiwei2000@gmail.com>"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+core_affinity = "^0"
