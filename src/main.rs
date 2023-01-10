@@ -1,21 +1,25 @@
 extern crate core_affinity;
 
+use crossbeam_epoch::{Atomic, Guard, Shared};
+use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
-    alloc::{alloc, dealloc, Layout},
-    thread, sync::{Arc, Mutex},
+    alloc::{alloc, Layout},
+    sync::Arc,
+    thread,
 };
-
-use core_affinity::CoreId;
-
 // shm get sizeof LLC slice and spawn process with CAT technology
 
 fn main() {
     // Retrieve the IDs of all active CPU cores.
     // let core_ids = core_affinity::get_core_ids().unwrap();
-    let signal = Arc::new(Mutex::new(0));
-    let core_ids = core_affinity::get_core_ids().unwrap();
+    let shared_array = Arc::new(RwLock::new([0u8; 8 * 1024]));
 
-    let core_ids = vec![core_ids[0],core_ids[16]];
+    let ptr = AtomicBool::new(false);
+    let core_ids = core_affinity::get_core_ids().unwrap();
+    let mut now = std::time::Instant::now();
+
+    let core_ids = vec![core_ids[0], core_ids[16]];
     dbg!(core_ids.clone());
     // Create a thread for each active CPU core.
     let handles = core_ids
@@ -28,17 +32,29 @@ fn main() {
                     match id.id {
                         0 => {
                             // P core affinity
-                            signal.lock();
-                            unsafe {
-                                let layout = Layout::new::<[u16; 100]>();
-                                let ptr = alloc(layout);
-
-                                *(ptr as *mut u16) = 42;
+                            for i in 0..8 * 1024 {
+                                shared_array[i] = 1;
                             }
-
-
+                            now = std::time::Instant::now();
+                            ptr.store(true, Ordering::Release);
+                            // wait for E core to finish
+                            while ptr.load(Ordering::SeqCst) {
+                                for i in 0..8 * 1024 {
+                                    shared_array[i] = 1;
+                                }
+                            }
+                            println!("E->P core latency: {:?}", now.elapsed());
+                            ptr.store(false, Ordering::Release);
                         }
-                        16 => { // E core affinity
+                        16 => {
+                            // E core affinity
+                            while ptr.load(Ordering::SeqCst) {
+                                for i in 0..8 * 1024 {
+                                    shared_array[i] = 0;
+                                }
+                            }
+                            println!("P->E core latency: {:?}", now.elapsed());
+                            ptr.store(false, Ordering::Release);
                         }
                         _ => {}
                     }

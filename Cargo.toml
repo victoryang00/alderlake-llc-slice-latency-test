@@ -1,13 +1,16 @@
 [package]
+author = ["victoryang00 <yangyiwei2000@gmail.com>"]
 edition = "2021"
 name = "alderlake-llc-slice-latency-test"
 version = "0.1.0"
-author = ["victoryang00 <yangyiwei2000@gmail.com>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
-core_affinity = "^0"
-
 [features]
-cat-process = []
+cat-process = ["shmem-ipc"]
+
+[dependencies]
+core_affinity = "0.7.6"
+crossbeam-epoch = "0.9.13"
+crossbeam-utils = "0.8.12"
+shmem-ipc = {version = "0.3.0", optional = true}
