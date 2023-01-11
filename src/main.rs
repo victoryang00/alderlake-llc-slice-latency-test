@@ -13,7 +13,7 @@ use std::{
 fn main() {
     // Retrieve the IDs of all active CPU cores.
     // let core_ids = core_affinity::get_core_ids().unwrap();
-    let shared_array = Arc::new(RwLock::new([0u8; 8 * 1024]));
+    let shared_array = Arc::new([0u8; 8 * 1024]);
 
     let ptr = AtomicBool::new(false);
     let core_ids = core_affinity::get_core_ids().unwrap();
