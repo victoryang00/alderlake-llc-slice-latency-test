@@ -13,4 +13,5 @@ cat-process = ["shmem-ipc"]
 core_affinity = "0.7.6"
 crossbeam-epoch = "0.9.13"
 crossbeam-utils = "0.8.12"
+lazy_static = "1.4.0"
 shmem-ipc = {version = "0.3.0", optional = true}

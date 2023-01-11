@@ -9,6 +9,7 @@ dependencies = [
  "core_affinity",
  "crossbeam-epoch",
  "crossbeam-utils",
+ "lazy_static",
  "shmem-ipc",
 ]
 
@@ -71,6 +72,12 @@ checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "lazy_static"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
