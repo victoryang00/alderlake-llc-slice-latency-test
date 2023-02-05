@@ -2,7 +2,6 @@ extern crate core_affinity;
 extern crate lazy_static;
 #[cfg(feature = "cat-process")]
 extern crate zerocopy;
-
 use lazy_static::lazy_static;
 use std::arch::x86_64::_rdtsc;
 use std::sync::{
@@ -66,7 +65,19 @@ lazy_static! {
 }
 
 #[cfg(feature = "cat-process")]
-fn set_qpos(way_qos: i32) {}
+fn set_qpos(way_qos: i32) {
+    let mut num_ca = 1;
+    let mut pq_config = pqos_l3ca {
+        class_id: 0,
+        cdp: 0,
+        u: U {
+            ways_mask: way_qos as u64,
+        },
+    };
+    unsafe {
+        pqos_l3ca_set(0, 1, &mut num_ca, pq_config);
+    }
+}
 
 fn taskset(cpuid: usize) {
     core_affinity::set_for_current(core_affinity::CoreId { id: cpuid });
@@ -158,22 +169,12 @@ fn get_latency_from_shmem_transfered_between_process() {
                 "P->E core start: {}",
                 unsafe { _rdtsc() } - now.load(Ordering::Acquire)
             );
-            r.receive_trusted(|p| {
-                ss = ss.wrapping_add(sum(p));
-                z
-            })
-            .unwrap();
+            r.receive_trusted(|p| p).unwrap();
         },
         || {
             taskset(16);
             set_qpos(11);
-            s.send_trusted(|p| {
-                z = std::cmp::min(p.len(), init.len() - x);
-                let part = &init[x..(x + z)];
-                p[0..z].copy_from_slice(part);
-                z
-            })
-            .unwrap();
+            s.send_trusted(|p| p).unwrap();
             println!(
                 "E->P core end: {}",
                 unsafe { _rdtsc() } - now.load(Ordering::Acquire)
