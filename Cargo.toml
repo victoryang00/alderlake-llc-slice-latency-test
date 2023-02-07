@@ -8,9 +8,10 @@ version = "0.1.0"
 
 [features]
 cat-process = ["shmem-ipc", "rusty-fork"]
+p-to-e = []
 
 [dependencies]
-core_affinity = "0.7.6"
+core_affinity = "0.8.0"
 crossbeam-epoch = "0.9.13"
 crossbeam-utils = "0.8.12"
 lazy_static = "1.4.0"

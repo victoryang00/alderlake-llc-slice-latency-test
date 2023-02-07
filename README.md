@@ -23,8 +23,36 @@ P->E core latency: 65666662426716
 E->P core latency: 65666662518902
 P->E core latency: 65666662540890
 ```
-For process cat+shmem back and forth(WIP):
+For process cat+shmem back and forth:
 ```bash
 $ cargo test --release --features=process
-
+P->E core latency: 512995
+```
+and because of 
+```bash
+error[E0499]: cannot borrow `r` as mutable more than once at a time
+   --> src/main.rs:189:9
+    |
+151 |     let output = fork(
+    |                  ---- first borrow later used by call
+...
+155 |         |_, _| {
+    |         ------ first mutable borrow occurs here
+...
+165 |                 r.receive_trusted(|p: &[u8]| {
+    |                 - first borrow occurs due to use of `r` in closure
+...
+189 |         || {
+    |         ^^ second mutable borrow occurs here
+...
+203 |                 r.receive_trusted(|p| {
+    |                 - second borrow occurs due to use of `r` in closure
+```
+reversely uncomment the sender and receiver, you'll get
+```bash
+thread 'main' panicked at 'Had unexpected output:
+E->P core latency: 43279
+', src/main.rs:224:5
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+[1]+  Done                    clear
 ```

@@ -4,12 +4,12 @@ extern crate lazy_static;
 extern crate zerocopy;
 use lazy_static::lazy_static;
 use std::arch::x86_64::_rdtsc;
+use std::io::Read;
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
 use std::time::Duration;
-
 // shm get sizeof LLC slice and spawn process with CAT technology
 #[cfg(feature = "cat-process")]
 use rusty_fork::{fork, rusty_fork_id};
@@ -20,7 +20,7 @@ use std::process;
 
 #[cfg(feature = "cat-process")]
 #[derive(Copy, Clone)]
-pub struct pqos_l3ca {
+pub struct PqosL3ca {
     class_id: u32,
     /**< class of service */
     cdp: i32,
@@ -44,7 +44,7 @@ struct S {
 
 #[cfg(feature = "cat-process")]
 extern "C" {
-    fn pqos_l3ca_set(l3cat_id: u32, max_num_ca: u32, num_ca: *const u32, pq_config: pqos_l3ca);
+    fn pqos_l3ca_set(l3cat_id: u32, max_num_ca: u32, num_ca: *const u32, pq_config: PqosL3ca);
 }
 
 lazy_static! {
@@ -54,7 +54,7 @@ lazy_static! {
 #[cfg(feature = "cat-process")]
 fn set_qpos(way_qos: i32) {
     let mut num_ca = 1;
-    let mut pq_config = pqos_l3ca {
+    let mut pq_config = PqosL3ca {
         class_id: 0,
         cdp: 0,
         u: U {
@@ -107,7 +107,7 @@ fn e_core_thread(running: Arc<AtomicBool>, shared_array: *mut u8) {
 
     running.store(false, Ordering::Release);
 }
-
+#[cfg(not(feature = "cat-process"))]
 fn main() {
     // Retrieve the IDs of all active CPU cores.
     // let core_ids = core_affinity::get_core_ids().unwrap();
@@ -139,59 +139,88 @@ fn capturing_output(cmd: &mut process::Command) {
         .stderr(process::Stdio::inherit());
 }
 
-#[test]
 #[cfg(feature = "cat-process")]
-fn get_latency_from_shmem_transfered_between_process() {
-    let s = Sender::new(8 * 1024).unwrap();
+fn main() {
+    let mut s = Sender::new(8 * 1024).unwrap();
     let memfd = s.memfd().as_file().try_clone().unwrap();
     let e = s.empty_signal().try_clone().unwrap();
     let f = s.full_signal().try_clone().unwrap();
-    let r = Receiver::open(8 * 1024, memfd, e, f).unwrap();
+    let mut r = Receiver::open(8 * 1024, memfd, e, f).unwrap();
     let mut x = 0;
     let mut ss: u64 = 0;
+    now.store(unsafe { _rdtsc() }, Ordering::Release);
     let output = fork(
-        "test::get_latency_from_shmem_transfered_between_process",
+        "main",
         rusty_fork_id!(),
         capturing_output,
-        |_, _| {
+        |child, _| {
             let mut sum: usize = 0;
+            let mut res = String::new();
             taskset(1);
             set_qpos(5);
-            println!(
-                "P->E core start: {}",
-                unsafe { _rdtsc() } - now.load(Ordering::Acquire)
-            );
-            r.receive_trusted(|p| unsafe {
-                for i in 0..1024 {
-                    sum += p[i] as usize;
-                }
-                sum
-            })
+            unsafe {
+                r.receive_trusted(|p: &[u8]| {
+                    for i in 0..1024 {
+                        sum += p[i] as usize;
+                    }
+                    sum
+                })
+            }
             .unwrap();
+            res = format!(
+                "P->E core latency: {}",
+                unsafe { _rdtsc() } - now.load(Ordering::Acquire)
+            )
+            .to_owned();
+            // unsafe {
+            //     s.send_trusted(|p: &mut [u8]| {
+            //         for i in 0..1024 {
+            //             sum += p[i] as usize;
+            //         }
+            //         sum
+            //     })
+            // }
+            // .unwrap();
+            // child
+            //     .inner_mut()
+            //     .stdout
+            //     .as_mut()
+            //     .unwrap()
+            //     .read_to_string(&mut res)
+            //     .unwrap();
+            // assert!(child.wait().unwrap().success());
+            res
         },
         || {
             let mut sum: usize = 0;
             taskset(16);
             set_qpos(11);
-            s.send_trusted(|p| unsafe {
-                for i in 0..1024 {
-                    sum += p[i] as usize;
-                }
-                sum
-            })
+            unsafe {
+                s.send_trusted(|p: &mut [u8]| {
+                    for i in 0..1024 {
+                        sum += p[i] as usize;
+                    }
+                    sum
+                })
+            }
             .unwrap();
-            println!(
-                "E->P core end: {}",
-                unsafe { _rdtsc() } - now.load(Ordering::Acquire)
-            );
+            // unsafe {
+            //     r.receive_trusted(|p: &[u8]| {
+            //         for i in 0..1024 {
+            //             sum += p[i] as usize;
+            //         }
+            //         sum
+            //     })
+            // }
+            // .unwrap();
+            // println!(
+            //     "E->P core latency: {}",
+            //     unsafe { _rdtsc() } - now.load(Ordering::Acquire)
+            // )
         },
     )
     .unwrap();
 
     std::thread::sleep(Duration::from_nanos(1000));
-    assert!(
-        !output.contains("E->"),
-        "Had unexpected output:\n{}",
-        output
-    );
+    println!("{}", output);
 }
