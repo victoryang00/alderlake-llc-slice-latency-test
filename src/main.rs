@@ -8,29 +8,16 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
-use std::thread::Thread;
 use std::time::Duration;
 
 // shm get sizeof LLC slice and spawn process with CAT technology
 #[cfg(feature = "cat-process")]
-use rusty_fork::{fork, rusty_fork_id, ChildWrapper};
+use rusty_fork::{fork, rusty_fork_id};
 #[cfg(feature = "cat-process")]
 use shmem_ipc::sharedring::{Receiver, Sender};
 #[cfg(feature = "cat-process")]
-use std::{fs, io::Read, panic, process};
-#[cfg(feature = "cat-process")]
-use zerocopy;
-#[cfg(feature = "cat-process")]
-fn setup_one<T: Copy + zerocopy::FromBytes + zerocopy::ToBytes>(
-    chunks: usize,
-) -> (Sender<T>, Receiver<T>) {
-    let s: Sender<T> = Sender::new(chunks).unwrap();
-    let memfd = s.memfd().as_file().try_clone().unwrap();
-    let e = s.empty_signal().try_clone().unwrap();
-    let f = s.full_signal().try_clone().unwrap();
-    let r: Receiver<T> = Receiver::open(chunks, memfd, e, f).unwrap();
-    (s, r)
-}
+use std::process;
+
 #[cfg(feature = "cat-process")]
 #[derive(Copy, Clone)]
 pub struct pqos_l3ca {
@@ -155,26 +142,44 @@ fn capturing_output(cmd: &mut process::Command) {
 #[test]
 #[cfg(feature = "cat-process")]
 fn get_latency_from_shmem_transfered_between_process() {
-    let (r, s) = setup_one::<u8>(8 * 1024);
+    let s = Sender::new(8 * 1024).unwrap();
+    let memfd = s.memfd().as_file().try_clone().unwrap();
+    let e = s.empty_signal().try_clone().unwrap();
+    let f = s.full_signal().try_clone().unwrap();
+    let r = Receiver::open(8 * 1024, memfd, e, f).unwrap();
     let mut x = 0;
     let mut ss: u64 = 0;
     let output = fork(
         "test::get_latency_from_shmem_transfered_between_process",
         rusty_fork_id!(),
         capturing_output,
-        || {
+        |_, _| {
+            let mut sum: usize = 0;
             taskset(1);
             set_qpos(5);
             println!(
                 "P->E core start: {}",
                 unsafe { _rdtsc() } - now.load(Ordering::Acquire)
             );
-            r.receive_trusted(|p| p).unwrap();
+            r.receive_trusted(|p| unsafe {
+                for i in 0..1024 {
+                    sum += p[i] as usize;
+                }
+                sum
+            })
+            .unwrap();
         },
         || {
+            let mut sum: usize = 0;
             taskset(16);
             set_qpos(11);
-            s.send_trusted(|p| p).unwrap();
+            s.send_trusted(|p| unsafe {
+                for i in 0..1024 {
+                    sum += p[i] as usize;
+                }
+                sum
+            })
+            .unwrap();
             println!(
                 "E->P core end: {}",
                 unsafe { _rdtsc() } - now.load(Ordering::Acquire)
